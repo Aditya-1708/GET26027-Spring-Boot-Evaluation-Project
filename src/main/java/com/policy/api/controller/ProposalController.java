@@ -2,16 +2,16 @@ package com.policy.api.controller;
 
 import com.policy.api.dto.request.ProposalRequest;
 import com.policy.api.dto.response.ProposalResponse;
-import com.policy.api.service.ProposalSerivce;
+import com.policy.api.service.ProposalService;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/proposals")
 public class ProposalController {
 
-    private final ProposalSerivce proposalService;
+    private final ProposalService proposalService;
 
-    public ProposalController(ProposalSerivce proposalService) {
+    public ProposalController(ProposalService proposalService) {
         this.proposalService = proposalService;
     }
 

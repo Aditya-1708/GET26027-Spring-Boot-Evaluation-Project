@@ -6,6 +6,9 @@ import com.policy.api.dto.request.AuditRequest;
 import com.policy.api.dto.request.ProposalRequest;
 import com.policy.api.dto.response.CustomerResponse;
 import com.policy.api.dto.response.ProposalResponse;
+import com.policy.api.exception.CustomerNotFoundException;
+import com.policy.api.exception.InvalidProposalException;
+import com.policy.api.exception.ProposalNotFoundException;
 import com.policy.api.model.Proposal;
 import com.policy.api.repository.ProposalRepository;
 import com.policy.api.util.IdGenerator;
@@ -13,7 +16,7 @@ import com.policy.api.validation.Validation;
 import org.springframework.stereotype.Service;
 
 @Service
-public class ProposalSerivce {
+public class ProposalService {
 
     private final ProposalRepository repository;
     private final Validation validation;
@@ -21,7 +24,7 @@ public class ProposalSerivce {
     private final CustomerService customerService;
     private final AuditService auditService;
 
-    public ProposalSerivce(ProposalRepository repository, IdGenerator generator, Validation validation, CustomerService customerService, AuditService auditService) {
+    public ProposalService(ProposalRepository repository, IdGenerator generator, Validation validation, CustomerService customerService, AuditService auditService) {
         this.repository = repository;
         this.generator = generator;
         this.validation = validation;
@@ -34,28 +37,38 @@ public class ProposalSerivce {
     }
 
     public ProposalResponse createProposal(ProposalRequest proposal) {
+
         String isValid = validation.validateProposal(proposal);
+        if (!isValid.equals("true")) {
+            throw new InvalidProposalException(isValid);
+        }
 
         CustomerResponse customer = customerService.getCustomer(proposal.getCustomerId());
+
+        if (customer == null) {
+            throw new CustomerNotFoundException(proposal.getCustomerId());
+        }
 
         String customerName = customer.getFirstName() + " " + customer.getLastName();
 
         if (customerName.equalsIgnoreCase(proposal.getNominee())) {
-            throw new RuntimeException("Customer and nominee cannot be the same.");
+            throw new InvalidProposalException("Customer and nominee cannot be the same.");
         }
-        if (!(isValid.equals("true"))) {
-            throw new RuntimeException(isValid);
-        }
+
         Proposal newProposal = new Proposal(generator.generateProposalId(), proposal.getCustomerId(), PolicyTerm.fromValue(proposal.getPolicyTerm()), proposal.getSumAssured(), proposal.getPAN(), proposal.getNominee(), proposal.getPaymentFrequency(), 0, PolicyStatus.PENDING);
 
         Proposal savedProposal = repository.save(newProposal);
 
         return mapToResponse(savedProposal);
-
     }
 
     public ProposalResponse getProposal(String proposalId) {
+
         Proposal fetchedProposal = repository.get(proposalId);
+
+        if (fetchedProposal == null) {
+            throw new ProposalNotFoundException(proposalId);
+        }
 
         return mapToResponse(fetchedProposal);
     }
@@ -65,7 +78,7 @@ public class ProposalSerivce {
         Proposal proposal = repository.get(proposalId);
 
         if (proposal == null) {
-            throw new RuntimeException("Proposal not found");
+            throw new ProposalNotFoundException(proposalId);
         }
 
         proposal.setPolicyUid(generator.generatePolicyNumber());

@@ -2,6 +2,7 @@ package com.policy.api.service;
 
 import com.policy.api.dto.request.CustomerRequest;
 import com.policy.api.dto.response.CustomerResponse;
+import com.policy.api.exception.CustomerNotFoundException;
 import com.policy.api.exception.InvalidCustomerException;
 import com.policy.api.model.Customer;
 import com.policy.api.repository.CustomerRepository;
@@ -77,7 +78,9 @@ public class CustomerService {
 
     public CustomerResponse getCustomer(String customerId) {
         Customer fetchedCustomer = repository.get(customerId);
-
+        if(fetchedCustomer == null){
+            throw new CustomerNotFoundException(customerId);
+        }
         return mapToResponse(fetchedCustomer);
     }
 
@@ -87,7 +90,7 @@ public class CustomerService {
         Customer existingCustomer = repository.get(customerId);
 
         if (existingCustomer == null) {
-            throw new InvalidCustomerException("Customer with ID " + customerId + " not found.");
+            throw new CustomerNotFoundException(customerId);
         }
 
         String isValid = validation.validateCustomer(customerRequest);
