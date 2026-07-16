@@ -7,15 +7,14 @@ import org.springframework.stereotype.Repository;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.HashMap;
-
+import java.util.concurrent.ConcurrentHashMap;
 @Repository
 public class CustomerRepository {
 
-    Map<String, Customer> map;
+    private final Map<String, Customer> map;
 
     public CustomerRepository(){
-        this.map = new HashMap<>();
+        this.map = new ConcurrentHashMap<>();
     }
 
 

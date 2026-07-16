@@ -4,7 +4,7 @@ import com.policy.api.model.Proposal;
 import org.springframework.stereotype.Repository;
 
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -14,7 +14,7 @@ public class ProposalRepository {
     private final Map<String, Proposal> map;
 
     public ProposalRepository() {
-        this.map = new HashMap<>();
+        this.map = new ConcurrentHashMap<>();
     }
 
     public Proposal save(Proposal proposal) {

@@ -3,6 +3,7 @@ package com.policy.api.controller;
 import com.policy.api.dto.response.CustomerResponse;
 import com.policy.api.service.CustomerService;
 import com.policy.api.dto.request.CustomerRequest;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -18,7 +19,7 @@ public class CustomerController {
     }
 
     @PostMapping
-    public CustomerResponse createCustomer(@RequestBody CustomerRequest customer) {
+    public CustomerResponse createCustomer(@Valid @RequestBody CustomerRequest customer) {
         return service.createCustomer(customer);
     }
 
@@ -33,7 +34,7 @@ public class CustomerController {
     }
 
     @PutMapping("/{customerID}")
-    public CustomerResponse updateCustomer(@PathVariable String customerID, @RequestBody CustomerRequest customer){
+    public CustomerResponse updateCustomer(@PathVariable String customerID, @Valid @RequestBody CustomerRequest customer){
         return service.updateCustomer(customerID, customer);
     }
 }

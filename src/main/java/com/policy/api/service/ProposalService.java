@@ -8,6 +8,7 @@ import com.policy.api.dto.response.CustomerResponse;
 import com.policy.api.dto.response.ProposalResponse;
 import com.policy.api.exception.CustomerNotFoundException;
 import com.policy.api.exception.InvalidProposalException;
+import com.policy.api.exception.ProposalAlreadySubmittedException;
 import com.policy.api.exception.ProposalNotFoundException;
 import com.policy.api.model.Proposal;
 import com.policy.api.repository.ProposalRepository;
@@ -81,6 +82,10 @@ public class ProposalService {
             throw new ProposalNotFoundException(proposalId);
         }
 
+        if (proposal.getPolicyStatus() == PolicyStatus.ACCEPTED) {
+            throw new ProposalAlreadySubmittedException(proposalId);
+        }
+
         proposal.setPolicyUid(generator.generatePolicyNumber());
         proposal.setPolicyStatus(PolicyStatus.ACCEPTED);
 
@@ -89,5 +94,6 @@ public class ProposalService {
         auditService.createAudit(new AuditRequest(generator.generateAuditId(), updatedProposal.getProposalId(), "Proposal submitted successfully"));
 
         return mapToResponse(updatedProposal);
+
     }
 }

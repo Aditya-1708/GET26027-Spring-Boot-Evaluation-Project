@@ -3,6 +3,7 @@ package com.policy.api.controller;
 import com.policy.api.dto.request.ProposalRequest;
 import com.policy.api.dto.response.ProposalResponse;
 import com.policy.api.service.ProposalService;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -16,7 +17,7 @@ public class ProposalController {
     }
 
     @PostMapping
-    public ProposalResponse createProposal(@RequestBody ProposalRequest proposalRequest) {
+    public ProposalResponse createProposal(@Valid @RequestBody ProposalRequest proposalRequest) {
         return proposalService.createProposal(proposalRequest);
     }
 
