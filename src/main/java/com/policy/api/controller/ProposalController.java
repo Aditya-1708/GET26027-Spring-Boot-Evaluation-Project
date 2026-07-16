@@ -1,29 +1,32 @@
 package com.policy.api.controller;
 
+import com.policy.api.dto.request.ProposalRequest;
+import com.policy.api.dto.response.ProposalResponse;
+import com.policy.api.service.ProposalSerivce;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/proposals")
 public class ProposalController {
 
-    private final proposalService service;
+    private final ProposalSerivce proposalService;
 
-    public ProposalController(proposalService service) {
-        this.service = service;
+    public ProposalController(ProposalSerivce proposalService) {
+        this.proposalService = proposalService;
     }
 
     @PostMapping
-    public ProposalResponse createProposal(@RequestBody ProposalRequest proposal){
-        return service.createProposal(proposal);
+    public ProposalResponse createProposal(@RequestBody ProposalRequest proposalRequest) {
+        return proposalService.createProposal(proposalRequest);
     }
 
-    @GetMapping("/{proposalID}")
-    public ProposalResponse getProposal(@PathVariable String proposalID){
-        return service.getProposal(proposalID);
+    @GetMapping("/{proposalId}")
+    public ProposalResponse getProposal(@PathVariable String proposalId) {
+        return proposalService.getProposal(proposalId);
     }
 
-    @PostMapping("/{proposalID}/submit")
-    public ProposalResponse submitProposal (@PathVariable String proposalID){
-        return service.submitProposal(proposalID);
+    @PostMapping("/{proposalId}/submit")
+    public ProposalResponse submitProposal(@PathVariable String proposalId) {
+        return proposalService.submitProposal(proposalId);
     }
 }

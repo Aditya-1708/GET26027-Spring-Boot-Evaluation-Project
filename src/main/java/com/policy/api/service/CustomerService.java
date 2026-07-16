@@ -6,6 +6,7 @@ import com.policy.api.exception.InvalidCustomerException;
 import com.policy.api.model.Customer;
 import com.policy.api.repository.CustomerRepository;
 import com.policy.api.util.IdGenerator;
+import com.policy.api.validation.Validation;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -18,20 +19,50 @@ public class CustomerService {
 
     private final IdGenerator generator;
 
-    public CustomerService(CustomerRepository repository, IdGenerator generator) {
+    private final Validation validation;
+
+    public CustomerService(CustomerRepository repository, IdGenerator generator, Validation validation) {
         this.repository = repository;
         this.generator = generator;
+        this.validation = validation;
+    }
+
+    private Customer mapToModel(CustomerRequest customer) {
+        return new Customer(
+                generator.generateCustomerId(),
+                customer.getFirstName(),
+                customer.getLastName(),
+                customer.getAge(),
+                customer.getGender(),
+                customer.getMobileNumber(),
+                customer.getEmail(),
+                customer.getAddress()
+        );
+    }
+
+    private CustomerResponse mapToResponse(Customer customer) {
+        return new CustomerResponse(
+                customer.getCustomerId(),
+                customer.getFirstName(),
+                customer.getLastName(),
+                customer.getAge(),
+                customer.getGender(),
+                customer.getMobileNumber(),
+                customer.getEmail(),
+                customer.getAddress()
+        );
     }
 
     public CustomerResponse createCustomer(CustomerRequest customer) {
-        if (customer.getAge() < 18 || customer.getAge() > 65) {
-            throw new InvalidCustomerException("Customer age must be between 18 and 65 years.");
+        String isValid = validation.validateCustomer(customer);
+        if (!isValid.equals("true")) {
+            throw new InvalidCustomerException(isValid);
         } else {
-            Customer newCustomer = new Customer(generator.generateCustomerID(), customer.getFirstName(), customer.getLastName(), customer.getAge(), customer.getGender(), customer.getMobileNumber(), customer.getEmail(), customer.getAddress());
 
+            Customer newCustomer = mapToModel(customer);
             Customer savedCustomer = repository.save(newCustomer);
 
-            return new CustomerResponse(savedCustomer.getCustomerId(), savedCustomer.getFirstName(), savedCustomer.getLastName(), savedCustomer.getAge(), savedCustomer.getGender(), savedCustomer.getMobileNumber(), savedCustomer.getEmail(), savedCustomer.getAddress());
+            return mapToResponse(savedCustomer);
         }
     }
 
@@ -39,8 +70,7 @@ public class CustomerService {
         List<Customer> customers = repository.get();
         List<CustomerResponse> fetchedCustomers = new ArrayList<>();
         for (Customer c : customers) {
-            CustomerResponse temp = new CustomerResponse(c.getCustomerId(), c.getFirstName(), c.getLastName(), c.getAge(), c.getGender(), c.getMobileNumber(), c.getEmail(), c.getAddress());
-            fetchedCustomers.add(temp);
+            fetchedCustomers.add(mapToResponse(c));
         }
         return fetchedCustomers;
     }
@@ -48,25 +78,24 @@ public class CustomerService {
     public CustomerResponse getCustomer(String customerId) {
         Customer fetchedCustomer = repository.get(customerId);
 
-        return new CustomerResponse(fetchedCustomer.getCustomerId(), fetchedCustomer.getFirstName(), fetchedCustomer.getLastName(), fetchedCustomer.getAge(), fetchedCustomer.getGender(), fetchedCustomer.getMobileNumber(), fetchedCustomer.getEmail(), fetchedCustomer.getAddress());
+        return mapToResponse(fetchedCustomer);
     }
 
     public CustomerResponse updateCustomer(String customerId, CustomerRequest customerRequest) {
 
-        // Fetch existing customer
+
         Customer existingCustomer = repository.get(customerId);
 
-        // Customer not found
         if (existingCustomer == null) {
             throw new InvalidCustomerException("Customer with ID " + customerId + " not found.");
         }
 
-        // Business validation
-        if (customerRequest.getAge() < 18 || customerRequest.getAge() > 65) {
-            throw new InvalidCustomerException("Customer age must be between 18 and 65 years.");
+        String isValid = validation.validateCustomer(customerRequest);
+
+        if (!isValid.equals("true")) {
+            throw new InvalidCustomerException(isValid);
         }
 
-        // Update existing object
         existingCustomer.setFirstName(customerRequest.getFirstName());
         existingCustomer.setLastName(customerRequest.getLastName());
         existingCustomer.setAge(customerRequest.getAge());
@@ -75,10 +104,8 @@ public class CustomerService {
         existingCustomer.setEmail(customerRequest.getEmail());
         existingCustomer.setAddress(customerRequest.getAddress());
 
-        // Save updated customer
         Customer updatedCustomer = repository.update(existingCustomer);
 
-        // Convert Model -> Response DTO
-        return new CustomerResponse(updatedCustomer.getCustomerId(), updatedCustomer.getFirstName(), updatedCustomer.getLastName(), updatedCustomer.getAge(), updatedCustomer.getGender(), updatedCustomer.getMobileNumber(), updatedCustomer.getEmail(), updatedCustomer.getAddress());
+        return mapToResponse(updatedCustomer);
     }
 }

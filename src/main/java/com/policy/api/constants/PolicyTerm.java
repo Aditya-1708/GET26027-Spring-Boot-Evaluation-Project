@@ -17,4 +17,13 @@ public enum PolicyTerm {
     public int getYears() {
         return years;
     }
+
+    public static PolicyTerm fromValue(int years) {
+        for (PolicyTerm term : values()) {
+            if (term.years == years) {
+                return term;
+            }
+        }
+        throw new IllegalArgumentException("Invalid policy term: " + years);
+    }
 }
