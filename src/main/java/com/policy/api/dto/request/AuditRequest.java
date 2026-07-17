@@ -11,7 +11,6 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 
 public class AuditRequest {
-    private String auditId;
     private String proposalId;
     private String action;
 }

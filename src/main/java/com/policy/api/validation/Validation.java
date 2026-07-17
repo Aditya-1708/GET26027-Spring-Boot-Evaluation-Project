@@ -33,7 +33,7 @@ public class Validation {
         else if(annualPremium < 5000){
             return "premium less than minimum requirement";
         }
-        else if(annualPremium > 50000 && !(PAN.matches("^[A-Z]{5}\\d{4}[A-Z]$")) ){
+        else if(annualPremium > 50000 && !(PAN == null || PAN.isBlank() || PAN.matches("^[A-Z]{5}\\d{4}[A-Z]$")) ){
             return "PAN number is mandatory for policies with annual premium of 50000";
         }
         else{

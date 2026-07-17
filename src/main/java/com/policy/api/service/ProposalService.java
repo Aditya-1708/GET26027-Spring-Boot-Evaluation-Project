@@ -101,7 +101,7 @@ public class ProposalService {
         proposal.setPolicyStatus(PolicyStatus.ACCEPTED);
 
 
-        auditService.createAudit(new AuditRequest(generator.generateAuditId(), proposal.getProposalId(), "Proposal submitted successfully"));
+        auditService.createAudit(new AuditRequest(proposal.getProposalId(), "Proposal submitted successfully"));
 
         return mapToResponse(proposal);
 
