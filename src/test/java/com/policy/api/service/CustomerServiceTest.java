@@ -49,7 +49,10 @@ class CustomerServiceTest {
 
         CustomerResponse response = service.createCustomer(request);
 
-        assertAll(() -> assertEquals("CUST001", response.getCustomerId()), () -> assertEquals("Aditya", response.getFirstName()), () -> assertEquals("Umesh", response.getLastName()), () -> assertEquals(22, response.getAge()), () -> assertEquals("Male", response.getGender()), () -> assertEquals("******3210", response.getMobileNumber()), () -> assertEquals("a*****@gmail.com", response.getEmail()));
+        assertAll(() -> assertEquals("CUST001", response.getCustomerId()), () -> assertEquals("Aditya", response.getFirstName()), () -> assertEquals("Umesh", response.getLastName()), () -> assertEquals(22, response.getAge()), () -> assertEquals("Male", response.getGender()),
+                () -> assertEquals("******3210", response.getMobileNumber()),
+                () -> assertEquals("a*****@gmail.com", response.getEmail())
+        );
 
 
         verify(validation).validateCustomer(request);

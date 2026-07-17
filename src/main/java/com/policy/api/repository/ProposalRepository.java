@@ -26,5 +26,10 @@ public class ProposalRepository {
         return map.getOrDefault(proposalId, null);
     }
 
+    public List<Proposal> getByCustomerId(String customerId) {
+        return map.values().stream()
+                .filter(proposal -> proposal.getCustomerId().equals(customerId)).toList();
+    }
+
 
 }

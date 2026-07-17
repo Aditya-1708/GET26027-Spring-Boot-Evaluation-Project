@@ -17,6 +17,7 @@ import com.policy.api.validation.Validation;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 public class ProposalService {
@@ -51,6 +52,8 @@ public class ProposalService {
 
         return proposal;
     }
+
+
 
     private Proposal mapToModel(ProposalRequest proposal) {
         return new Proposal(generator.generateProposalId(), proposal.getCustomerId(), PolicyTerm.fromValue(proposal.getPolicyTerm()), proposal.getSumAssured(), proposal.getPAN(), proposal.getNominee(), proposal.getPaymentFrequency(), 0, PolicyStatus.PENDING, false, null);
@@ -87,6 +90,20 @@ public class ProposalService {
         Proposal fetchedProposal = getActiveProposal(proposalId);
 
         return mapToResponse(fetchedProposal);
+    }
+
+    public boolean canDeleteCustomer (String customerId){
+        List<Proposal> fetchedProposals = repository.getByCustomerId(customerId);
+        boolean allDeleted = fetchedProposals.stream().forEach(proposal -> {
+            if (proposal.isDeleted() == true) {
+
+            }
+        } );
+        if(!(fetchedProposals.size() == 0) || !allDeleted){
+            return false;
+        }
+
+        return true
     }
 
     public ProposalResponse submitProposal(String proposalId) {

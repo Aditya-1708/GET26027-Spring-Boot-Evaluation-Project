@@ -35,7 +35,6 @@ class AuditServiceTest {
     void shouldCreateAuditSuccessfully() {
 
         AuditRequest request = new AuditRequest(
-                "AUD001",
                 "PROP001",
                 "Proposal submitted successfully"
         );

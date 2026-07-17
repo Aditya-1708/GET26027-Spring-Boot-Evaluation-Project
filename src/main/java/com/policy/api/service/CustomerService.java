@@ -130,6 +130,8 @@ public class CustomerService {
     public CustomerResponse deleteCustomer(String customerId) {
         Customer existingCustomer = getActiveCustomer(customerId);
 
+
+
         existingCustomer.setDeleted(true);
         existingCustomer.setDeletedAt(LocalDateTime.now());
 
