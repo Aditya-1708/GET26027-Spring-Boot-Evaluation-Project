@@ -32,9 +32,5 @@ public class CustomerRepository {
         return map.getOrDefault(customerId,null);
     }
 
-    public Customer update(Customer customer){
-        map.put(customer.getCustomerId(), customer);
-        return customer;
-    }
 
 }

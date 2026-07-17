@@ -30,4 +30,9 @@ public class ProposalController {
     public ProposalResponse submitProposal(@PathVariable String proposalId) {
         return proposalService.submitProposal(proposalId);
     }
+
+    @DeleteMapping("/{proposalId}")
+    public ProposalResponse deleteProposal(@PathVariable String proposalId){
+        return  proposalService.deleteProposal(proposalId);
+    }
 }

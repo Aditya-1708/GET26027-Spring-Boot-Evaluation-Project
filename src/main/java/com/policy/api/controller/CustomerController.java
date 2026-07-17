@@ -28,13 +28,18 @@ public class CustomerController {
         return service.getAllCustomers();
     }
 
-    @GetMapping("/{customerID}")
-    public CustomerResponse getCustomer(@PathVariable String customerID){
-        return service.getCustomer(customerID);
+    @GetMapping("/{customerId}")
+    public CustomerResponse getCustomer(@PathVariable String customerId){
+        return service.getCustomer(customerId);
     }
 
-    @PutMapping("/{customerID}")
-    public CustomerResponse updateCustomer(@PathVariable String customerID, @Valid @RequestBody CustomerRequest customer){
-        return service.updateCustomer(customerID, customer);
+    @PutMapping("/{customerId}")
+    public CustomerResponse updateCustomer(@PathVariable String customerId, @Valid @RequestBody CustomerRequest customer){
+        return service.updateCustomer(customerId, customer);
+    }
+
+    @DeleteMapping("/{customerId}")
+    public CustomerResponse deleteCustomer(@PathVariable String customerId){
+        return service.deleteCustomer(customerId);
     }
 }
