@@ -76,7 +76,7 @@ GET26027 -  Spring Boot Evaluation Project/
 
 ### 1. Clone the Repository
 ```bash
-git clone <repository-url>
+git clone https://github.com/Aditya-1708/GET26027-Spring-Boot-Evaluation-Project.git
 cd "GET26027 -  Spring Boot Evaluation Project"
 ```
 
