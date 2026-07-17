@@ -44,27 +44,91 @@ To ensure lightweight execution, the application uses thread-safe, in-memory dat
 
 ```text
 GET26027 -  Spring Boot Evaluation Project/
+├── gradle/
+│   └── wrapper/
+│       ├── gradle-wrapper.jar
+│       └── gradle-wrapper.properties
 ├── src/
 │   ├── main/
-│   │   ├── java/com/policy/api/
-│   │   │   ├── PolicyApiApplication.java       # Spring Boot Application Entry Point
-│   │   │   ├── config/                         # Application configuration classes
-│   │   │   ├── constants/                      # Policy enums (PaymentFrequency, PolicyStatus, PolicyTerm, ReferenceCategory)
-│   │   │   ├── controller/                     # REST API Controllers
-│   │   │   ├── dto/                            # DTOs (Request, Response, ErrorResponse)
-│   │   │   ├── exception/                      # Custom Exceptions & Global Exception Handler
-│   │   │   ├── model/                          # Core Domain Entities (Customer, Proposal, Audit)
-│   │   │   ├── repository/                     # In-Memory Repositories using ConcurrentHashMap
-│   │   │   ├── service/                        # Service layer implementing business workflows
-│   │   │   ├── util/                           # Utilities (Thread-safe Atomic ID Generators)
-│   │   │   └── validation/                     # Programmatic validation components
+│   │   ├── java/
+│   │   │   └── com/
+│   │   │       └── policy/
+│   │   │           └── api/
+│   │   │               ├── config/
+│   │   │               ├── constants/
+│   │   │               │   ├── PaymentFrequency.java
+│   │   │               │   ├── PolicyStatus.java
+│   │   │               │   ├── PolicyTerm.java
+│   │   │               │   └── ReferenceCategory.java
+│   │   │               ├── controller/
+│   │   │               │   ├── AuditController.java
+│   │   │               │   ├── CustomerController.java
+│   │   │               │   ├── ProposalController.java
+│   │   │               │   └── ReferenceMasterController.java
+│   │   │               ├── dto/
+│   │   │               │   ├── request/
+│   │   │               │   │   ├── AuditRequest.java
+│   │   │               │   │   ├── CustomerRequest.java
+│   │   │               │   │   └── ProposalRequest.java
+│   │   │               │   └── response/
+│   │   │               │       ├── AuditResponse.java
+│   │   │               │       ├── CustomerResponse.java
+│   │   │               │       ├── ErrorResponse.java
+│   │   │               │       ├── ProposalResponse.java
+│   │   │               │       └── ReferenceDataResponse.java
+│   │   │               ├── exception/
+│   │   │               │   ├── ApiException.java
+│   │   │               │   ├── CustomerNotFoundException.java
+│   │   │               │   ├── GlobalExceptionHandler.java
+│   │   │               │   ├── InvalidCustomerException.java
+│   │   │               │   ├── InvalidProposalException.java
+│   │   │               │   ├── ProposalAlreadySubmittedException.java
+│   │   │               │   └── ProposalNotFoundException.java
+│   │   │               ├── model/
+│   │   │               │   ├── Audit.java
+│   │   │               │   ├── Customer.java
+│   │   │               │   └── Proposal.java
+│   │   │               ├── repository/
+│   │   │               │   ├── AuditRepository.java
+│   │   │               │   ├── CustomerRepository.java
+│   │   │               │   ├── ProposalRepository.java
+│   │   │               │   └── ReferenceMasterRepository.java
+│   │   │               ├── service/
+│   │   │               │   ├── AuditService.java
+│   │   │               │   ├── CustomerService.java
+│   │   │               │   ├── ProposalService.java
+│   │   │               │   └── ReferenceMasterService.java
+│   │   │               ├── util/
+│   │   │               │   ├── IdGenerator.java
+│   │   │               │   └── MaskPii.java
+│   │   │               ├── validation/
+│   │   │               │   └── Validation.java
+│   │   │               └── PolicyApiApplication.java
 │   │   └── resources/
-│   │       └── application.properties          # Server and application configuration parameters
+│   │       ├── static/
+│   │       ├── templates/
+│   │       └── application.properties
 │   └── test/
-│       └── java/com/policy/api/
-│           ├── PolicyApiApplicationTests.java  # Smoke test class
-│           ├── service/                        # Service layer unit tests
-│           └── validation/                     # Validation rules unit tests
+│       └── java/
+│           └── com/
+│               └── policy/
+│                   └── api/
+│                       ├── service/
+│                       │   ├── AuditServiceTest.java
+│                       │   ├── CustomerServiceTest.java
+│                       │   ├── ProposalServiceTest.java
+│                       │   └── ReferenceMasterServiceTest.java
+│                       ├── validation/
+│                       │   └── ValidationTest.java
+│                       └── PolicyApiApplicationTests.java
+├── DESIGN_DECISIONS.md
+├── README.md
+├── build.gradle
+├── gradlew
+├── gradlew.bat
+├── settings.gradle
+└── suggestions.md
+
 ```
 
 ---
