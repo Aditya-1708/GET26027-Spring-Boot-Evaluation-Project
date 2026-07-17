@@ -26,21 +26,19 @@ public class ProposalService {
     private final IdGenerator generator;
     private final CustomerService customerService;
     private final AuditService auditService;
-    private final MaskPii maskPii;
+    private final MaskPii maskPii = new MaskPii();
 
     public ProposalService(
             ProposalRepository repository,
             CustomerService customerService,
             AuditService auditService,
             IdGenerator generator,
-            MaskPii maskPii,
             Validation validation) {
 
         this.repository = repository;
         this.customerService = customerService;
         this.auditService = auditService;
         this.generator = generator;
-        this.maskPii = maskPii;
         this.validation = validation;
     }
 

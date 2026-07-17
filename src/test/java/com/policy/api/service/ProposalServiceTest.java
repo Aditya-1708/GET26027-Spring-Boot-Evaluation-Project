@@ -57,8 +57,7 @@ class ProposalServiceTest {
                 60000,
                 "ABCDE1234F",
                 "Rahul Sharma",
-                PaymentFrequency.YEARLY
-        );
+                PaymentFrequency.YEARLY);
 
         CustomerResponse customer = new CustomerResponse(
                 "CUST001",
@@ -68,8 +67,7 @@ class ProposalServiceTest {
                 "Male",
                 "9876543210",
                 "aditya@gmail.com",
-                "Bangalore"
-        );
+                "Bangalore");
 
         Proposal proposal = new Proposal(
                 "PROP001",
@@ -80,8 +78,9 @@ class ProposalServiceTest {
                 "Rahul Sharma",
                 PaymentFrequency.YEARLY,
                 0,
-                PolicyStatus.PENDING
-        );
+                PolicyStatus.PENDING,
+                false,
+                null);
 
         when(validation.validateProposal(request)).thenReturn("true");
         when(customerService.getCustomer("CUST001")).thenReturn(customer);
@@ -92,12 +91,23 @@ class ProposalServiceTest {
 
         ProposalResponse response = service.createProposal(request);
 
-        assertNotNull(response);
-        assertEquals("PROP001", response.getProposalId());
-        assertEquals("CUST001", response.getCustomerId());
+        assertAll(
+                () -> assertNotNull(response),
+                () -> assertEquals("PROP001", response.getProposalId()),
+                () -> assertEquals("CUST001", response.getCustomerId()),
+                () -> assertEquals(PolicyTerm.TERM_20, response.getPolicyTerm()),
+                () -> assertEquals(500000, response.getSumAssured()),
+                () -> assertEquals("ABCDE****F", response.getPAN()),
+                () -> assertEquals("Rahul Sharma", response.getNominee()),
+                () -> assertEquals(PaymentFrequency.YEARLY, response.getPaymentFrequency()),
+                () -> assertEquals(0, response.getPolicyUid()),
+                () -> assertEquals(PolicyStatus.PENDING, response.getPolicyStatus())
+        );
 
-        verify(repository).save(any(Proposal.class));
-    }
+        verify(validation).validateProposal(request);
+        verify(customerService).getCustomer("CUST001");
+        verify(generator).generateProposalId();
+        verify(repository).save(any(Proposal.class));    }
 
     @Test
     void shouldThrowInvalidProposalExceptionWhenValidationFails() {
@@ -109,16 +119,14 @@ class ProposalServiceTest {
                 60000,
                 "ABCDE1234F",
                 "Rahul",
-                PaymentFrequency.YEARLY
-        );
+                PaymentFrequency.YEARLY);
 
         when(validation.validateProposal(request))
                 .thenReturn("Invalid policy term");
 
         assertThrows(
                 InvalidProposalException.class,
-                () -> service.createProposal(request)
-        );
+                () -> service.createProposal(request));
 
         verify(repository, never()).save(any());
     }
@@ -133,8 +141,7 @@ class ProposalServiceTest {
                 60000,
                 "ABCDE1234F",
                 "Rahul",
-                PaymentFrequency.YEARLY
-        );
+                PaymentFrequency.YEARLY);
 
         when(validation.validateProposal(request)).thenReturn("true");
 
@@ -143,8 +150,7 @@ class ProposalServiceTest {
 
         assertThrows(
                 CustomerNotFoundException.class,
-                () -> service.createProposal(request)
-        );
+                () -> service.createProposal(request));
     }
 
     @Test
@@ -157,8 +163,7 @@ class ProposalServiceTest {
                 60000,
                 "ABCDE1234F",
                 "Aditya Umesh",
-                PaymentFrequency.YEARLY
-        );
+                PaymentFrequency.YEARLY);
 
         CustomerResponse customer = new CustomerResponse(
                 "CUST001",
@@ -168,16 +173,14 @@ class ProposalServiceTest {
                 "Male",
                 "9876543210",
                 "aditya@gmail.com",
-                "Bangalore"
-        );
+                "Bangalore");
 
         when(validation.validateProposal(request)).thenReturn("true");
         when(customerService.getCustomer("CUST001")).thenReturn(customer);
 
         assertThrows(
                 InvalidProposalException.class,
-                () -> service.createProposal(request)
-        );
+                () -> service.createProposal(request));
     }
 
     @Test
@@ -192,14 +195,14 @@ class ProposalServiceTest {
                 "Rahul",
                 PaymentFrequency.YEARLY,
                 0,
-                PolicyStatus.PENDING
-        );
+                PolicyStatus.PENDING,
+                false,
+                null);
 
         when(repository.get("PROP001"))
                 .thenReturn(proposal);
 
-        ProposalResponse response =
-                service.getProposal("PROP001");
+        ProposalResponse response = service.getProposal("PROP001");
 
         assertEquals("PROP001", response.getProposalId());
     }
@@ -212,8 +215,7 @@ class ProposalServiceTest {
 
         assertThrows(
                 ProposalNotFoundException.class,
-                () -> service.getProposal("PROP999")
-        );
+                () -> service.getProposal("PROP999"));
     }
 
     @Test
@@ -228,8 +230,9 @@ class ProposalServiceTest {
                 "Rahul",
                 PaymentFrequency.YEARLY,
                 0,
-                PolicyStatus.PENDING
-        );
+                PolicyStatus.PENDING,
+                false,
+                null);
 
         when(repository.get("PROP001"))
                 .thenReturn(proposal);
@@ -240,21 +243,15 @@ class ProposalServiceTest {
         when(generator.generateAuditId())
                 .thenReturn("AUD001");
 
-        when(repository.save(any(Proposal.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
-
         when(auditService.createAudit(any(AuditRequest.class)))
                 .thenReturn(
                         new AuditResponse(
                                 "AUD001",
                                 "PROP001",
                                 "Proposal submitted successfully",
-                                null
-                        )
-                );
+                                null));
 
-        ProposalResponse response =
-                service.submitProposal("PROP001");
+        ProposalResponse response = service.submitProposal("PROP001");
 
         assertEquals(100001, response.getPolicyUid());
         assertEquals(PolicyStatus.ACCEPTED,
@@ -271,7 +268,6 @@ class ProposalServiceTest {
 
         assertThrows(
                 ProposalNotFoundException.class,
-                () -> service.submitProposal("PROP999")
-        );
+                () -> service.submitProposal("PROP999"));
     }
 }

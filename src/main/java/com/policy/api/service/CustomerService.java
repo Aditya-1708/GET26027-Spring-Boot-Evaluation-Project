@@ -25,18 +25,16 @@ public class CustomerService {
 
     private final Validation validation;
 
-    private final MaskPii maskPii;
+    private final MaskPii maskPii = new MaskPii();
 
     public CustomerService(
             CustomerRepository repository,
             IdGenerator generator,
-            Validation validation,
-            MaskPii maskPii) {
+            Validation validation) {
 
         this.repository = repository;
         this.generator = generator;
         this.validation = validation;
-        this.maskPii = maskPii;
     }
 
 
