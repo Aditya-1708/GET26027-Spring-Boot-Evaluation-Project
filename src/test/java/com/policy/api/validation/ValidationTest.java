@@ -168,4 +168,42 @@ class ValidationTest {
                 validation.validateProposal(request)
         );
     }
+
+    @Test
+    void shouldFailForNullPanWithHighPremium() {
+
+        ProposalRequest request = new ProposalRequest(
+                "CUST001",
+                20,
+                500000,
+                60000,
+                null,
+                "Rahul Sharma",
+                PaymentFrequency.YEARLY
+        );
+
+        assertEquals(
+                "PAN number is mandatory for policies with annual premium of 50000",
+                validation.validateProposal(request)
+        );
+    }
+
+    @Test
+    void shouldFailForBlankPanWithHighPremium() {
+
+        ProposalRequest request = new ProposalRequest(
+                "CUST001",
+                20,
+                500000,
+                60000,
+                "   ",
+                "Rahul Sharma",
+                PaymentFrequency.YEARLY
+        );
+
+        assertEquals(
+                "PAN number is mandatory for policies with annual premium of 50000",
+                validation.validateProposal(request)
+        );
+    }
 }

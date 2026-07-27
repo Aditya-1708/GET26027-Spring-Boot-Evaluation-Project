@@ -14,6 +14,7 @@ import com.policy.api.exception.ProposalNotFoundException;
 import com.policy.api.model.Proposal;
 import com.policy.api.repository.ProposalRepository;
 import com.policy.api.util.IdGenerator;
+import com.policy.api.util.MaskPii;
 import com.policy.api.validation.Validation;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,6 +25,7 @@ import static org.mockito.Mockito.*;
 
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
@@ -43,6 +45,9 @@ class ProposalServiceTest {
 
     @Mock
     private AuditService auditService;
+
+    @Spy
+    private MaskPii maskPii = new MaskPii();
 
     @InjectMocks
     private ProposalService service;
@@ -199,8 +204,19 @@ class ProposalServiceTest {
                 false,
                 null);
 
+        CustomerResponse customer = new CustomerResponse(
+                "CUST001",
+                "Aditya",
+                "Umesh",
+                22,
+                "Male",
+                "9876543210",
+                "aditya@gmail.com",
+                "Bangalore");
+
         when(repository.get("PROP001"))
                 .thenReturn(proposal);
+        when(customerService.getCustomer("CUST001")).thenReturn(customer);
 
         ProposalResponse response = service.getProposal("PROP001");
 
@@ -234,14 +250,26 @@ class ProposalServiceTest {
                 false,
                 null);
 
+        CustomerResponse customer = new CustomerResponse(
+                "CUST001",
+                "Aditya",
+                "Umesh",
+                22,
+                "Male",
+                "9876543210",
+                "aditya@gmail.com",
+                "Bangalore");
+
         when(repository.get("PROP001"))
                 .thenReturn(proposal);
+
+        when(customerService.getCustomer("CUST001")).thenReturn(customer);
 
         when(generator.generatePolicyNumber())
                 .thenReturn(100001);
 
-        when(generator.generateAuditId())
-                .thenReturn("AUD001");
+        when(repository.save(any(Proposal.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
 
         when(auditService.createAudit(any(AuditRequest.class)))
                 .thenReturn(
@@ -269,5 +297,60 @@ class ProposalServiceTest {
         assertThrows(
                 ProposalNotFoundException.class,
                 () -> service.submitProposal("PROP999"));
+    }
+
+    @Test
+    void shouldThrowCustomerNotFoundWhenGetProposalHasDeletedCustomer() {
+        Proposal proposal = new Proposal("PROP001", "CUST001", PolicyTerm.TERM_20, 500000, "ABCDE1234F", "Rahul", PaymentFrequency.YEARLY, 0, PolicyStatus.PENDING, false, null);
+
+        when(repository.get("PROP001")).thenReturn(proposal);
+        when(customerService.getCustomer("CUST001")).thenThrow(new CustomerNotFoundException("CUST001"));
+
+        assertThrows(CustomerNotFoundException.class, () -> service.getProposal("PROP001"));
+    }
+
+    @Test
+    void shouldThrowCustomerNotFoundWhenSubmitProposalHasDeletedCustomer() {
+        Proposal proposal = new Proposal("PROP001", "CUST001", PolicyTerm.TERM_20, 500000, "ABCDE1234F", "Rahul", PaymentFrequency.YEARLY, 0, PolicyStatus.PENDING, false, null);
+
+        when(repository.get("PROP001")).thenReturn(proposal);
+        when(customerService.getCustomer("CUST001")).thenThrow(new CustomerNotFoundException("CUST001"));
+
+        assertThrows(CustomerNotFoundException.class, () -> service.submitProposal("PROP001"));
+    }
+
+    @Test
+    void shouldThrowCustomerNotFoundWhenDeleteProposalHasDeletedCustomer() {
+        Proposal proposal = new Proposal("PROP001", "CUST001", PolicyTerm.TERM_20, 500000, "ABCDE1234F", "Rahul", PaymentFrequency.YEARLY, 0, PolicyStatus.PENDING, false, null);
+
+        when(repository.get("PROP001")).thenReturn(proposal);
+        when(customerService.getCustomer("CUST001")).thenThrow(new CustomerNotFoundException("CUST001"));
+
+        assertThrows(CustomerNotFoundException.class, () -> service.deleteProposal("PROP001"));
+    }
+
+    @Test
+    void shouldDeleteProposalSuccessfully() {
+        Proposal proposal = new Proposal("PROP001", "CUST001", PolicyTerm.TERM_20, 500000, "ABCDE1234F", "Rahul", PaymentFrequency.YEARLY, 0, PolicyStatus.PENDING, false, null);
+        CustomerResponse customer = new CustomerResponse("CUST001", "Aditya", "Umesh", 22, "Male", "9876543210", "aditya@gmail.com", "Bangalore");
+
+        when(repository.get("PROP001")).thenReturn(proposal);
+        when(customerService.getCustomer("CUST001")).thenReturn(customer);
+        when(repository.save(any(Proposal.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ProposalResponse response = service.deleteProposal("PROP001");
+
+        assertNotNull(response);
+    }
+
+    @Test
+    void shouldThrowInvalidProposalExceptionWhenDeletingSubmittedProposal() {
+        Proposal proposal = new Proposal("PROP001", "CUST001", PolicyTerm.TERM_20, 500000, "ABCDE1234F", "Rahul", PaymentFrequency.YEARLY, 100001, PolicyStatus.ACCEPTED, false, null);
+        CustomerResponse customer = new CustomerResponse("CUST001", "Aditya", "Umesh", 22, "Male", "9876543210", "aditya@gmail.com", "Bangalore");
+
+        when(repository.get("PROP001")).thenReturn(proposal);
+        when(customerService.getCustomer("CUST001")).thenReturn(customer);
+
+        assertThrows(InvalidProposalException.class, () -> service.deleteProposal("PROP001"));
     }
 }

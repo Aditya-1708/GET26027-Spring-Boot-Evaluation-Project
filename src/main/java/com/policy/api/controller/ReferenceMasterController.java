@@ -1,6 +1,7 @@
 package com.policy.api.controller;
 
 import com.policy.api.constants.ReferenceCategory;
+import com.policy.api.dto.response.ReferenceDataResponse;
 import com.policy.api.service.ReferenceMasterService;
 import org.springframework.web.bind.annotation.*;
 
@@ -16,7 +17,7 @@ public class ReferenceMasterController {
 
     @GetMapping("/{category}")
 
-    public Object getReferenceData(@PathVariable ReferenceCategory category) {
+    public ReferenceDataResponse<?> getReferenceData(@PathVariable ReferenceCategory category) {
         return service.getReferenceData(category);
     }
 

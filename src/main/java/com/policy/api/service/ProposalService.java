@@ -27,20 +27,22 @@ public class ProposalService {
     private final IdGenerator generator;
     private final CustomerService customerService;
     private final AuditService auditService;
-    private final MaskPii maskPii = new MaskPii();
+    private final MaskPii maskPii;
 
     public ProposalService(
             ProposalRepository repository,
             CustomerService customerService,
             AuditService auditService,
             IdGenerator generator,
-            Validation validation) {
+            Validation validation,
+            MaskPii maskPii) {
 
         this.repository = repository;
         this.customerService = customerService;
         this.auditService = auditService;
         this.generator = generator;
         this.validation = validation;
+        this.maskPii = maskPii;
     }
 
     private Proposal getActiveProposal(String proposalId) {
@@ -60,7 +62,7 @@ public class ProposalService {
     }
 
     private ProposalResponse mapToResponse(Proposal proposal) {
-        return new ProposalResponse(proposal.getProposalId(), proposal.getCustomerId(), proposal.getPolicyTerm(), proposal.getSumAssured(), maskPii.maskPAN(proposal.getPAN()), proposal.getNominee(), proposal.getPaymentFrequency(), proposal.getPolicyUid(), proposal.getPolicyStatus());
+        return new ProposalResponse(proposal.getProposalId(), proposal.getCustomerId(), proposal.getPolicyTerm(), proposal.getSumAssured(), maskPii.maskPAN(proposal.getPan()), proposal.getNominee(), proposal.getPaymentFrequency(), proposal.getPolicyUid(), proposal.getPolicyStatus());
     }
 
     public ProposalResponse createProposal(ProposalRequest proposal) {
@@ -88,44 +90,46 @@ public class ProposalService {
     public ProposalResponse getProposal(String proposalId) {
 
         Proposal fetchedProposal = getActiveProposal(proposalId);
+        customerService.getCustomer(fetchedProposal.getCustomerId());
 
         return mapToResponse(fetchedProposal);
     }
 
-    public boolean canDeleteCustomer (String customerId){
-        List<Proposal> fetchedProposals = repository.getByCustomerId(customerId);
-        boolean allDeleted = fetchedProposals.stream().forEach(proposal -> {
-            if (proposal.isDeleted() == true) {
-
-            }
-        } );
-        if(!(fetchedProposals.size() == 0) || !allDeleted){
-            return false;
-        }
-
-        return true
-    }
 
     public ProposalResponse submitProposal(String proposalId) {
 
         Proposal proposal = getActiveProposal(proposalId);
+        customerService.getCustomer(proposal.getCustomerId());
 
         if (proposal.getPolicyStatus() == PolicyStatus.ACCEPTED) {
             throw new ProposalAlreadySubmittedException(proposalId);
         }
 
-        proposal.setPolicyUid(generator.generatePolicyNumber());
-        proposal.setPolicyStatus(PolicyStatus.ACCEPTED);
+        Proposal submittedProposal = new Proposal(
+                proposal.getProposalId(),
+                proposal.getCustomerId(),
+                proposal.getPolicyTerm(),
+                proposal.getSumAssured(),
+                proposal.getPan(),
+                proposal.getNominee(),
+                proposal.getPaymentFrequency(),
+                generator.generatePolicyNumber(),
+                PolicyStatus.ACCEPTED,
+                proposal.isDeleted(),
+                proposal.getDeletedAt()
+        );
 
+        Proposal savedProposal = repository.save(submittedProposal);
 
-        auditService.createAudit(new AuditRequest(proposal.getProposalId(), "Proposal submitted successfully"));
+        auditService.createAudit(new AuditRequest(savedProposal.getProposalId(), "Proposal submitted successfully"));
 
-        return mapToResponse(proposal);
+        return mapToResponse(savedProposal);
 
     }
 
     public ProposalResponse deleteProposal(String proposalId) {
         Proposal proposal = getActiveProposal(proposalId);
+        customerService.getCustomer(proposal.getCustomerId());
 
         if (proposal.getPolicyStatus() == PolicyStatus.ACCEPTED) {
             throw new InvalidProposalException(
@@ -133,10 +137,23 @@ public class ProposalService {
             );
         }
 
-        proposal.setDeleted(true);
-        proposal.setDeletedAt(LocalDateTime.now());
+        Proposal deletedProposal = new Proposal(
+                proposal.getProposalId(),
+                proposal.getCustomerId(),
+                proposal.getPolicyTerm(),
+                proposal.getSumAssured(),
+                proposal.getPan(),
+                proposal.getNominee(),
+                proposal.getPaymentFrequency(),
+                proposal.getPolicyUid(),
+                proposal.getPolicyStatus(),
+                true,
+                LocalDateTime.now()
+        );
 
-        return mapToResponse(proposal);
+        Proposal savedProposal = repository.save(deletedProposal);
+
+        return mapToResponse(savedProposal);
     }
 
 }

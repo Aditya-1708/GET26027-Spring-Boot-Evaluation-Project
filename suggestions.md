@@ -1,271 +1,432 @@
-# Code Review Suggestions
+# Executive Summary
 
-This document presents a comprehensive technical review of the **Policy Proposal Processing API** project. As a Senior Java Backend Engineer and Technical Reviewer, I have evaluated the codebase architecture, design choices, validation mechanisms, exception handling, data layer implementation, and testing strategies.
+This document presents a comprehensive, senior-level pre-submission code review of the **Policy Proposal Processing API** project. As a Senior Java Backend Engineer, I have analyzed the entire codebase, including controllers, services, repositories, exception handling, data mapping, build configurations, and unit tests.
 
----
+### Current State
+The project is structured as a standard three-tier REST API utilizing Spring Boot and Java 21. It implements in-memory repositories using thread-safe collections (`ConcurrentHashMap`) and counters (`AtomicInteger`), and provides distinct request/response DTOs, custom exception wrappers, and a global exception interceptor. 
 
-## Technical Issues and Code Review Findings
-
-### 1. Potential NullPointerException in PAN Validation
-
-**Severity**
-- High
-
-**Location**
-- **File**: `src/main/java/com/policy/api/validation/Validation.java`
-- **Class**: `Validation`
-- **Method**: `validateProposal`
-
-**Problem**
-When validating proposal rules, the validation logic checks if the annual premium exceeds ₹50,000. If so, it verifies that a PAN number is provided and conforms to a regular expression. However, it calls `PAN.matches(...)` without a null check. Because `PAN` is a nullable field in `ProposalRequest` (it does not have any `@NotNull` or `@NotBlank` constraint), passing a null value for `PAN` with a premium > 50,000 triggers a `NullPointerException`.
-
-**Impact**
-If a client submits a proposal with an annual premium greater than 50,000 but omits the `PAN` field (or sends it as null), the application will crash internally, causing a `500 Internal Server Error` instead of returning a clean validation error message (such as a `400 Bad Request`).
-
-**Recommendation**
-Add a null/empty check for the `PAN` field inside the conditional block before invoking the `.matches()` method.
+### GET Evaluation Recommendation: **FAIL (as-is) / High PASS (with suggested fixes)**
+* **Why it would fail in its current state:** The project currently suffers from a broken test suite (`./gradlew test` fails out-of-the-box due to compilation and runtime test failures), and a critical logic bug in the validation layer that completely bypasses the mandatory PAN card check for high-premium policies. Automated evaluation pipelines would reject this submission immediately.
+* **Why it will easily pass with fixes:** The architectural fundamentals are highly sound. The separation of concerns, package organization, use of DTOs, thread-safe constructs, and manual mapping logic show a level of care and structure that is well above typical graduate trainee submissions. Resolving the identified compilation, test, and logic errors will turn this into an excellent submission.
 
 ---
 
-### 2. Manual Instantiation of Managed Spring Component (MaskPii)
+# High Priority Tasks
 
-**Severity**
-- Medium
+These are critical issues that must be resolved before submitting the assignment.
 
-**Location**
-- **File**: `src/main/java/com/policy/api/service/ProposalService.java`
-- **Class**: `ProposalService`
-- **Method**: Class field instantiation
+## Critical: Incorrect Logic and Bypassed PAN Validation
 
-**Problem**
-The class `MaskPii` is defined as a Spring bean using `@Component`. In `CustomerService`, it is properly injected via constructor injection. However, in `ProposalService`, it is manually instantiated via `new MaskPii()` at the field level, bypassing Spring's dependency injection container.
+### Location
+`src/main/java/com/policy/api/validation/Validation.java` → `Validation` → `validateProposal`
 
-**Impact**
-This violates the dependency injection pattern and tightly couples `ProposalService` to a concrete instance of `MaskPii`. This prevents standard Mockito unit testing where `MaskPii` might need to be mocked or stubbed, and overrides Spring’s lifecycle management for that bean.
+### Problem
+The logic to enforce a mandatory PAN card check for annual premiums greater than ₹50,000 is written as:
+```java
+else if(annualPremium > 50000 && !(PAN == null || PAN.isBlank() || PAN.matches("^[A-Z]{5}\\d{4}[A-Z]$")))
+```
+If a proposal request is submitted with an annual premium > 50,000 but the PAN field is completely omitted or sent as null, the expression `PAN == null` short-circuits to `true`, making the parenthesized expression `true`. The negation operator `!` then turns this into `false`. As a result, the code skips this block, goes to the `else` branch, and returns `"true"` (validation passes). The validation error is only returned if a client provides a non-blank, invalid PAN string.
 
-**Recommendation**
-Modify the constructor of `ProposalService` to accept `MaskPii` as a parameter and let the Spring container inject the bean. Remove the direct field instantiation.
+### Why it matters
+This is a critical business rule violation. In practice, PAN is never validated as mandatory. Anyone can submit a high-premium policy with no PAN and successfully bypass tax and financial compliance checks.
 
----
+### Suggested Fix
+Invert the condition within the exclamation mark or rewrite it clearly. The service should fail validation if the premium is high AND the PAN is either null, blank, or doesn't match the regex pattern.
+- DO NOT use the outer negation. Instead, write the condition to check if `PAN == null` OR `PAN.isBlank()` OR `!PAN.matches(...)`.
 
-### 3. Missing Exception Handler for ProposalAlreadySubmittedException
-
-**Severity**
-- Medium
-
-**Location**
-- **File**: `src/main/java/com/policy/api/exception/GlobalExceptionHandler.java`
-- **Class**: `GlobalExceptionHandler`
-- **Method**: N/A (Missing handler)
-
-**Problem**
-The `ProposalAlreadySubmittedException` is thrown in `ProposalService` when a user attempts to submit a proposal that has already been accepted. While this exception extends `ApiException`, the global exception handler only handles specific subclass exceptions (`InvalidCustomerException` and `InvalidProposalException`) explicitly. It does not have a handler mapped for `ProposalAlreadySubmittedException` or the base `ApiException` class.
-
-**Impact**
-Since the exception is not explicitly mapped, it is caught by the fallback `Exception.class` handler. This returns an `HTTP 500 Internal Server Error` with a generic message "An unexpected error occurred" instead of an `HTTP 400 Bad Request` with the actual reason.
-
-**Recommendation**
-Add a handler for `ProposalAlreadySubmittedException` (or map the parent `ApiException` class) to the bad request handler method in `GlobalExceptionHandler` to ensure correct HTTP response mapping.
+### Priority
+Critical
 
 ---
 
-### 4. Leakage of ID Generation logic into DTO and Duplicate Generation Calls
+## Critical: Broken Unit Test (NullPointerException)
 
-**Severity**
-- Medium
+### Location
+`src/test/java/com/policy/api/service/CustomerServiceTest.java` → `CustomerServiceTest` → `shouldDeleteCustomerSuccessfully`
 
-**Location**
-- **File**: `src/main/java/com/policy/api/service/ProposalService.java` and `src/main/java/com/policy/api/service/AuditService.java`
-- **Class**: `ProposalService`, `AuditService`
-- **Method**: `submitProposal`, `createAudit`, `mapToModel`
+### Problem
+The test method fails with a `NullPointerException` during execution. Inside `CustomerService.deleteCustomer(customerId)`, the service calls `hasActiveProposals(customerId)`, which queries `proposalRepository.getByCustomerId(customerId)`. Since `proposalRepository` is a Mockito mock and its `getByCustomerId` method is not stubbed for `"CUST001"` in this test, Mockito returns a default value of `null` instead of an empty list. The service then attempts to check `fetchedProposals.isEmpty()`, which throws the NPE.
 
-**Problem**
-In `ProposalService.submitProposal()`, when creating an audit trail, the service calls `generator.generateAuditId()` to pass it to the `AuditRequest` constructor. However, `AuditService.createAudit()` maps the request to the domain model by calling `generator.generateAuditId()` again. The value passed via the request DTO is completely discarded and overwritten.
+### Why it matters
+Broken unit tests fail the gradle test lifecycle and stop build pipelines, which would lead to an automated reject of the assignment submission.
 
-**Impact**
-Including a read-only generated ID (`auditId`) inside a request DTO violates DTO encapsulation principles (clients should not supply entity IDs during creation). Moreover, this double-invocation increments the underlying thread-safe atomic counter twice for a single record, wasting ID sequences.
+### Suggested Fix
+Add a stubbing in the test setup for `shouldDeleteCustomerSuccessfully` using Mockito's `when(proposalRepository.getByCustomerId(...))` to return an empty list or a list of soft-deleted proposals.
 
-**Recommendation**
-Remove the `auditId` field from `AuditRequest` DTO and avoid generating the ID in `ProposalService`. The `AuditService` should internally handle ID generation during entity mapping.
+### Priority
+Critical
 
 ---
 
-### 5. Lack of Customer Soft-Delete Checks in Proposal Workflows
+## Critical: Broken Unit Test (UnnecessaryStubbingException)
 
-**Severity**
-- Medium
+### Location
+`src/test/java/com/policy/api/service/ProposalServiceTest.java` → `ProposalServiceTest` → `shouldSubmitProposalSuccessfully`
 
-**Location**
-- **File**: `src/main/java/com/policy/api/service/ProposalService.java`
-- **Class**: `ProposalService`
-- **Method**: `getProposal`, `submitProposal`, `deleteProposal`
+### Problem
+The test method stubs `when(generator.generateAuditId()).thenReturn("AUD001")`. However, the method under test (`ProposalService.submitProposal`) constructs an `AuditRequest` DTO which does not invoke `generateAuditId()`. The ID is generated downstream inside `AuditService.createAudit()`. Under Mockito's strict JUnit 5 extension, stubbing a mock method that is never invoked during the test execution throws an `UnnecessaryStubbingException`.
 
-**Problem**
-The application supports soft-deleting customers. However, once a customer is soft-deleted, their pre-existing proposals remain active. A client can still fetch, delete, or submit (transition to `ACCEPTED` status) proposals associated with a soft-deleted customer because `ProposalService` does not check if the customer is active.
+### Why it matters
+Causes the unit test execution to fail, causing build pipeline failures.
 
-**Impact**
-This violates referential integrity and business domain rules. It allows insurance policies/proposals to be approved for deleted/inactive customers.
+### Suggested Fix
+Remove the unused stubbing for `generator.generateAuditId()` from the test method setup.
 
-**Recommendation**
-Add checks in `ProposalService`'s proposal retrieval and mutation methods to verify that the associated customer is present and not soft-deleted.
+### Priority
+Critical
 
 ---
 
-### 6. Non-Standard Starters and Build Configuration Issues
+## High: Unhandled `InvalidCustomerException` leading to HTTP 500
 
-**Severity**
-- Medium
+### Location
+`src/main/java/com/policy/api/exception/GlobalExceptionHandler.java` → `GlobalExceptionHandler`
 
-**Location**
-- **File**: `build.gradle`
-- **Class**: N/A
-- **Method**: Dependencies block
+### Problem
+`InvalidCustomerException` is thrown by the service layer when a customer fails programmatic validation (such as the age bounds check). However, `InvalidCustomerException` extends `RuntimeException` directly (rather than the base custom `ApiException`), and the `GlobalExceptionHandler` does not define an explicit `@ExceptionHandler` for it.
 
-**Problem**
-The build configuration imports non-standard Spring Boot starter dependencies:
-- `spring-boot-starter-validation-test`
-- `spring-boot-starter-webmvc-test`
+### Why it matters
+Because it is not handled, the exception falls back to the generic `Exception.class` handler. This returns an HTTP `500 Internal Server Error` with the message "An unexpected error occurred." instead of an HTTP `400 Bad Request` with the actual validation message (e.g., "Customer age must be between 18 and 65 years.").
 
-Additionally, it uses `spring-boot-starter-webmvc` instead of the standard `spring-boot-starter-web`, and references an unreleased Spring Boot version `4.1.0`.
+### Suggested Fix
+Refactor `InvalidCustomerException` to inherit from the custom `ApiException` class (similar to `InvalidProposalException`), or define a specific `@ExceptionHandler(InvalidCustomerException.class)` in the `GlobalExceptionHandler` that returns `HttpStatus.BAD_REQUEST`.
 
-**Impact**
-This can lead to build portability issues. Missing tomcat/server engines in `webmvc` might fail to start the embedded web container when launching as a standalone application. Standard testing libraries like JUnit/AssertJ/Mockito are not bundled properly due to the missing standard `spring-boot-starter-test`.
-
-**Recommendation**
-Replace the unreleased Spring Boot version with a stable release (e.g. `3.x.x`). Replace the non-standard testing and web starters with the official `spring-boot-starter-test` and `spring-boot-starter-web` dependencies.
+### Priority
+High
 
 ---
 
-### 7. Thread-Safety Concerns with In-Memory Object Mutations
+# Medium Priority Tasks
 
-**Severity**
-- Medium
+These issues should be resolved to meet clean code standards, Spring framework guidelines, and proper domain integration.
 
-**Location**
-- **File**: `src/main/java/com/policy/api/service/CustomerService.java`
-- **Class**: `CustomerService`
-- **Method**: `updateCustomer` / `deleteCustomer`
+## Medium: Soft-Deleted Customers with Active Proposals
 
-**Problem**
-While the repository map uses `ConcurrentHashMap` for thread-safe map operations, the entities retrieved from the map (like `Customer`) are mutated directly in the service class via setters without locking or synchronization.
+### Location
+`src/main/java/com/policy/api/service/ProposalService.java` → `ProposalService` → `getProposal` / `submitProposal` / `deleteProposal`
 
-**Impact**
-If multiple concurrent HTTP threads attempt to modify the same customer reference, a race condition could result in partially written/inconsistent state.
+### Problem
+The application supports soft-deleting customers. When a customer is soft-deleted, their existing proposals remain active in memory. The `ProposalService` does not check the status of the associated customer when performing operations. A user can still fetch, delete, or submit (approve and generate a policy number for) proposals belonging to a soft-deleted customer.
 
-**Recommendation**
-Consider implementing synchronization or defensive copying/cloning when retrieving and updating objects from the in-memory repository to guarantee thread-safe mutations.
+### Why it matters
+This violates referential integrity and business logic. Insurance policies should not be approved or managed for inactive/soft-deleted customers.
 
----
+### Suggested Fix
+Add validation in the proposal service methods to look up the associated customer using `CustomerService.getCustomer()`. Since `CustomerService` throws `CustomerNotFoundException` for soft-deleted customers, this will automatically prevent mutations on proposals of inactive customers.
 
-### 8. Duplicate Import Statements in Exception Handler
-
-**Severity**
-- Low
-
-**Location**
-- **File**: `src/main/java/com/policy/api/exception/GlobalExceptionHandler.java`
-- **Class**: N/A
-- **Method**: N/A
-
-**Problem**
-Import statements for `jakarta.servlet.http.HttpServletRequest`, `org.springframework.http.HttpStatus`, and `org.springframework.http.ResponseEntity` are duplicated in the import section.
-
-**Impact**
-This is a minor code smell that degrades code cleaniness and readability.
-
-**Recommendation**
-Clean up the duplicate imports from the file header.
+### Priority
+Medium
 
 ---
 
-### 9. Redundant Validation Logic Between API and Service Layers
+## Medium: Spring Boot Dependency Injection Bypass
 
-**Severity**
-- Low
+### Location
+`src/main/java/com/policy/api/service/CustomerService.java` & `src/main/java/com/policy/api/service/ProposalService.java` → Fields
 
-**Location**
-- **File**: `src/main/java/com/policy/api/validation/Validation.java`
-- **Class**: `Validation`
-- **Method**: `validateCustomer`
+### Problem
+The class `MaskPii` is annotated with `@Component` to be managed as a bean in the Spring application context. However, inside both `CustomerService` and `ProposalService`, it is manually instantiated as a field variable:
+```java
+private final MaskPii maskPii = new MaskPii();
+```
+This completely bypasses Spring's IoC container.
 
-**Problem**
-The programmatic validation layer checks if a customer's age is between 18 and 65. However, this exact rule is already verified at the entry controller level via `@Min(18)` and `@Max(65)` annotations on the `CustomerRequest` DTO.
+### Why it matters
+This violates dependency injection design principles and tightly couples the service layers to a concrete class. It prevents configuring `MaskPii` as a mock or stub in unit testing or applying Spring AOP/lifecycle management.
 
-**Impact**
-Duplicate validation logic leads to redundant checks and potential maintenance synchronization overhead if the age bounds ever change.
+### Suggested Fix
+Remove the manual `new MaskPii()` instantiations. Declare `MaskPii` as a constructor argument in both `CustomerService` and `ProposalService` to allow Spring to inject the managed bean.
 
-**Recommendation**
-Consolidate the check. If the controller enforces syntactic limits, the service layer can rely on it and avoid duplicate manual checks, or keep a single source of truth.
-
----
-
-### 10. Inconsistent Counter Declarations in IdGenerator
-
-**Severity**
-- Low
-
-**Location**
-- **File**: `src/main/java/com/policy/api/util/IdGenerator.java`
-- **Class**: `IdGenerator`
-- **Method**: N/A (Class fields)
-
-**Problem**
-The counter for policy numbers (`counter`) is declared as `static final`, while `customerCount`, `proposalCount`, and `auditCount` are declared as non-static instance variables. 
-
-**Impact**
-This causes inconsistent state sharing behavior. Since the bean is configured as a Spring singleton, this is not an active bug, but it represents poor practice. If the bean scope is ever changed, it will lead to unexpected differences in behavior.
-
-**Recommendation**
-Declare all counter variables consistently as instance fields of the singleton class.
+### Priority
+Medium
 
 ---
 
-## Overall Review
+## Medium: Non-standard Build Configuration and Invalid Versions
 
-Below is the score evaluation of the project across various dimensions (scored out of 10):
+### Location
+`build.gradle` → plugins & dependencies
 
-| Area | Score | Notes / Rationale |
-| :--- | :---: | :--- |
-| **Architecture** | 8/10 | Well-separated layered architecture. Entities and relationships are correctly decoupled using IDs instead of circular references. |
-| **Code Quality** | 7/10 | Code is generally clean, though some minor code smells (duplicate imports, redundant validations, inconsistent declarations) are present. |
-| **Spring Boot Usage** | 6/10 | Manual instantiation of `MaskPii` and non-standard starters in `build.gradle` pull the score down. |
-| **Java Best Practices** | 7/10 | Good use of `AtomicInteger` and `ConcurrentHashMap`, but mutable in-memory object modifications are not synchronized. |
-| **Testing** | 8/10 | Comprehensive test cases covering most edge cases. Test cases compile and run successfully. |
-| **Readability** | 9/10 | Variable names and class structures are intuitive and easy to understand. |
-| **Maintainability** | 7/10 | High maintainability overall, but exception mappings and validation logic are slightly scattered. |
-| **Project Structure** | 9/10 | Clear package layout distinguishing controllers, services, repositories, and models. |
-| **Documentation** | 9/10 | Excellent documentation in `DESIGN_DECISIONS.md` explaining the workflow and architecture. |
-| **Assignment Completeness** | 9/10 | Fulfills all functional requirements (Customer CRUD, Proposal creation/submission, auditing, and soft delete). |
+### Problem
+The project configuration contains several dependency issues:
+1. It uses Spring Boot version `'4.1.0'`. Spring Boot 4.x is not a released version.
+2. It includes non-existent testing dependencies: `'org.springframework.boot:spring-boot-starter-validation-test'` and `'org.springframework.boot:spring-boot-starter-webmvc-test'`.
+3. It uses `spring-boot-starter-webmvc` instead of the standard `spring-boot-starter-web`.
+4. It is missing the standard testing framework wrapper `'org.springframework.boot:spring-boot-starter-test'`.
 
-**Overall Score**: **7.9 / 10**
+### Why it matters
+This configuration is brittle and non-standard. The lack of standard starters breaks test utility version management and might prevent test execution on clean environments without cached custom repositories.
+
+### Suggested Fix
+Set the Spring Boot version to a stable 3.x release (such as `'3.4.1'`). Clean up the dependencies by replacing the invalid validation and webmvc test starters with the single standard starter:
+- `testImplementation 'org.springframework.boot:spring-boot-starter-test'`
+- Replace `spring-boot-starter-webmvc` with `spring-boot-starter-web`.
+
+### Priority
+Medium
 
 ---
 
-## Graduate Engineering Trainee (GET) Assignment Review
+# Low Priority Tasks
 
-### Would this project pass?
-**Yes**, this project would very likely **PASS** a GET evaluation. 
+These are code quality improvements, naming standards, and optimization suggestions.
 
-The submission demonstrates a solid grasp of REST API development, layered architecture, unit testing, and DTO usage. The clean separation of concerns and thread-safe collections usage would put it in the upper bracket of typical trainee submissions.
+## Low: Thread-Safety Risks on In-Memory Object Mutations
 
-### Strengths:
-1. **Layered Structure**: Trainees often bundle business logic inside controllers or model classes. This project maintains a strict boundary separating Controller, Service, and Repository layers.
-2. **DTO Mapping**: The correct implementation of separate request and response DTOs showcases an understanding of API contract versioning and payload encapsulation.
-3. **Thread Safety**: Demonstrating knowledge of concurrent execution by using `ConcurrentHashMap` and `AtomicInteger` in an in-memory repository shows foresight.
-4. **Comprehensive Test Coverage**: The existence of distinct unit tests for validation, controllers, and services is excellent.
+### Location
+`src/main/java/com/policy/api/service/CustomerService.java` → `CustomerService` → `updateCustomer`
 
-### Weaknesses:
-1. **NullPointer Risk in Validation**: The lack of defensive programming when validating nullable fields like `PAN` is a classic oversight.
-2. **Bypassing Dependency Injection**: Manually instantiating `MaskPii` using the `new` keyword in a Spring service is a noticeable deviation from framework conventions.
-3. **Exception Routing**: The oversight in mapping `ProposalAlreadySubmittedException` results in raw HTTP 500 error leaks.
-4. **Cascading State Consistency**: A soft-deleted customer should not have active, submittable proposals, which is a business rule loophole.
+### Problem
+Although the repository uses `ConcurrentHashMap` for thread safety, the entity instances stored inside the map are shared references. In `updateCustomer()`, the service retrieves the customer and calls setters directly on the mutable entity reference:
+```java
+existingCustomer.setFirstName(customerRequest.getFirstName());
+// ...
+```
 
-### Things that would impress reviewers:
-- Decoupling models using foreign keys (IDs) instead of full object reference mappings, avoiding recursive JSON serialization issues.
-- Thorough use of JUnit 5 `assertAll()` for grouped assertions in test files.
-- Documenting technical decisions in a clear `DESIGN_DECISIONS.md` markdown file.
+### Why it matters
+In a concurrent environment (e.g., multiple HTTP threads making requests), two threads modifying the same customer reference concurrently can cause race conditions, resulting in an inconsistent or partially updated customer state.
 
-### Things reviewers may question:
-- Why `MaskPii` was manually instantiated in `ProposalService` but correctly injected in `CustomerService`.
-- Why non-standard test starters (e.g. `spring-boot-starter-validation-test`) and unreleased Spring Boot versions are specified in the build configuration.
-- Why the audit ID is passed inside the `AuditRequest` DTO if it's immediately regenerated by the mapping layer.
+### Suggested Fix
+Use defensive copying. Retrieve the entity, create a copy, modify the fields on the copied instance, and save/replace it back in the repository.
+
+### Priority
+Low
+
+---
+
+## Low: Redundant and Dead Code in Customer/Proposal Deletion Check
+
+### Location
+`src/main/java/com/policy/api/service/ProposalService.java` → `ProposalService` → `canDeleteCustomer`
+
+### Problem
+The method `canDeleteCustomer` in `ProposalService` implements the exact same logic as `hasActiveProposals` in `CustomerService`. Furthermore, `ProposalService.canDeleteCustomer` is never used anywhere in the codebase.
+
+### Why it matters
+Dead code increases cognitive overhead, and duplicate code violates the DRY (Don't Repeat Yourself) principle.
+
+### Suggested Fix
+Remove the unused `canDeleteCustomer` method from `ProposalService`.
+
+### Priority
+Low
+
+---
+
+## Low: Misleading Helper Method Name
+
+### Location
+`src/main/java/com/policy/api/service/CustomerService.java` → `CustomerService` → `hasActiveProposals`
+
+### Problem
+The helper method checks if a customer has active proposals. However, the boolean logic is:
+```java
+if (fetchedProposals.isEmpty()) { return true; }
+return fetchedProposals.stream().allMatch(Proposal::isDeleted);
+```
+If a customer has NO proposals (empty list), it returns `true`. If all proposals are soft-deleted, it returns `true`. If the customer has an active proposal, it returns `false`.
+
+### Why it matters
+The method returns `true` when there are **no** active proposals, and `false` when there **are** active proposals. This completely contradicts its name, making the code highly confusing to read and maintain.
+
+### Suggested Fix
+Rename the method to `hasNoActiveProposals` or invert the return logic to match the name.
+
+### Priority
+Low
+
+---
+
+## Low: Inconsistent Counter Field Scope
+
+### Location
+`src/main/java/com/policy/api/util/IdGenerator.java` → `IdGenerator`
+
+### Problem
+The policy number counter is declared as a static variable:
+```java
+private static final AtomicInteger counter = new AtomicInteger(100000);
+```
+Meanwhile, the customer, proposal, and audit counters are instance fields (`private final AtomicInteger`).
+
+### Why it matters
+Since `IdGenerator` is registered as a Spring singleton bean, there is no need for `counter` to be static. Mixing static and instance states is inconsistent and could cause state synchronization mismatches if the bean scope is ever changed.
+
+### Suggested Fix
+Declare `counter` as a standard instance variable: `private final AtomicInteger counter = ...`.
+
+### Priority
+Low
+
+---
+
+## Low: Java Naming Convention Violation in Model
+
+### Location
+`src/main/java/com/policy/api/model/Proposal.java` → `Proposal`
+
+### Problem
+The fields `Nominee` and `PolicyUid` start with uppercase letters.
+
+### Why it matters
+This violates standard Java camelCase naming conventions. It also causes Lombok to generate capital-letter getters/setters (`getNominee`, `getPolicyUid`) which does not align with standard bean specifications and can cause mapping issues in serialization libraries.
+
+### Suggested Fix
+Rename the fields to `nominee` and `policyUid`.
+
+### Priority
+Low
+
+---
+
+## Low: Redundant Customer Age Validation
+
+### Location
+`src/main/java/com/policy/api/validation/Validation.java` → `Validation` → `validateCustomer`
+
+### Problem
+The programmatic check inside the service layer verifies if age is between 18 and 65 years. However, this rule is already validated at the controller binding level via JSR-380 annotations `@Min(18)` and `@Max(65)` inside `CustomerRequest`.
+
+### Why it matters
+Duplicate validation logic violates the single source of truth principle, leading to maintenance issues if boundaries are modified.
+
+### Suggested Fix
+Rely on the JSR-380 DTO annotations and remove the redundant manual check from `Validation`.
+
+### Priority
+Low
+
+---
+
+## Low: Return Type `Object` in Reference Controller
+
+### Location
+`src/main/java/com/policy/api/controller/ReferenceMasterController.java` → `ReferenceMasterController` → `getReferenceData`
+
+### Problem
+The controller method is declared to return `Object` instead of a strongly typed class structure.
+
+### Why it matters
+It reduces compile-time type safety and prevents API documentation tools (like Swagger/OpenAPI) from discovering the response schema.
+
+### Suggested Fix
+Change the controller return type to `ReferenceDataResponse<?>`.
+
+### Priority
+Low
+
+---
+
+## Low: Non-Standard Trailing Slash in Get Mapping
+
+### Location
+`src/main/java/com/policy/api/controller/CustomerController.java` → `CustomerController` → `getAllCustomers`
+
+### Problem
+The endpoint is mapped as `@GetMapping("/")` instead of `@GetMapping` or `@GetMapping("")`.
+
+### Why it matters
+This introduces path matching inconsistencies. Clients are forced to use `/customers/` instead of `/customers` to retrieve customer listings (depending on Spring path matching configuration).
+
+### Suggested Fix
+Remove the trailing slash from the mapping.
+
+### Priority
+Low
+
+---
+
+# Test Review
+
+### Correctness
+* **Issue:** The test suite does not compile and run out-of-the-box. The `CustomerServiceTest` throws a `NullPointerException` due to an unstubbed repository call, and `ProposalServiceTest` throws an `UnnecessaryStubbingException` due to an unused Mockito stub.
+* **Good Tests:** Tests such as `shouldCreateCustomerSuccessfully`, `shouldThrowInvalidCustomerExceptionWhenValidationFails`, and `ReferenceMasterServiceTest` are well-structured, use correct Mockito annotations, and utilize JUnit 5 `assertAll` for strong validations.
+
+### Unnecessary Tests
+* There are no unnecessary test files, but some stubbing setups are unused and cause test suite crashes under strict mock settings.
+
+### Missing Tests
+1. **Validation edge case:** There is no test verifying that proposal validation fails when `PAN` is null or empty and the premium exceeds 50,000. Writing this test would have immediately caught the PAN logic bug.
+2. **Cascading State Check:** There are no tests checking whether the proposal service blocks proposal creation or submission when the associated customer is soft-deleted.
+3. **Negative deletion flow:** There is no unit test in `CustomerServiceTest` to verify that `deleteCustomer` successfully throws `InvalidCustomerException` when a customer attempts to delete but has active proposals.
+
+### Weak Assertions
+In `AuditServiceTest.shouldCreateAuditSuccessfully`, the test asserts that `response.getAuditId()` equals `"AUD001"`. However, the mock `IdGenerator.generateAuditId()` is never stubbed in the setup, which means it returned `null` inside the service's `mapToModel` method. The test passes only because the mock repository is hard-configured to return a stubbed `Audit` object with `"AUD001"`. This assertion is weak because it masks the fact that the ID generation component returned null during the actual system execution.
+
+### Mocking and Readability
+* Mocking boundaries are mostly correct using `@ExtendWith(MockitoExtension.class)`.
+* Readability is high, with clean naming conventions like `shouldReturnOnlyActiveCustomers` and structured AAA (Arrange-Act-Assert) blocks.
+
+---
+
+# Architecture Review
+
+### Layered Architecture & Separation of Concerns
+* **Strengths:** Excellent boundaries. Controller handles HTTP mapping, Service handles business validation, and Repository manages the database simulation.
+* **Weaknesses:** Bypassing Dependency Injection by manually calling `new MaskPii()` in service classes violates architectural isolation.
+
+### DTO Usage & Mapping
+* **Strengths:** Excellent separation between request inputs and response payloads. Internal database flags (`deleted`, `deletedAt`) are protected from direct external modification.
+* **Weaknesses:** Programmatic mapping code is written inline inside service classes (`mapToModel`, `mapToResponse`). While acceptable for small assignments, using a mapping framework or dedicated converter classes keeps services cleaner.
+
+### Validation & Exception Handling
+* **Strengths:** Good split between DTO annotation validation (for null/empty/ranges) and business validation (for policy values). Centralized exception advice handles most errors cleanly.
+* **Weaknesses:** Incorrect inheritance of `InvalidCustomerException` (extends `RuntimeException` directly instead of `ApiException`) breaks global exception routing, resulting in raw HTTP 500 error leakages.
+
+### Repository Design
+* **Strengths:** Clean in-memory simulation using thread-safe collections.
+* **Weaknesses:** Mutable objects are modified directly without deep cloning or locking, risking concurrent write corruptions.
+
+---
+
+# Submission Checklist
+
+- [ ] Fix PAN validation condition in `Validation.java` to fail when PAN is null/empty for premium > 50,000.
+- [ ] Stub `proposalRepository.getByCustomerId` in `CustomerServiceTest.shouldDeleteCustomerSuccessfully` to fix `NullPointerException`.
+- [ ] Remove unused `generator.generateAuditId()` stub in `ProposalServiceTest.shouldSubmitProposalSuccessfully` to fix `UnnecessaryStubbingException`.
+- [ ] Change `InvalidCustomerException` to extend `ApiException` (or add an explicit handler) to return HTTP 400 instead of HTTP 500.
+- [ ] Inject `MaskPii` into `CustomerService` and `ProposalService` using constructor injection rather than manual instantiation.
+- [ ] Fix `build.gradle` to use a stable Spring Boot 3.x release, replace invalid test starters, and add `spring-boot-starter-test`.
+- [ ] Add active/soft-deleted checks for customers when fetching or mutating proposals in `ProposalService`.
+- [ ] Rename `Nominee` and `PolicyUid` fields in `Proposal.java` to start with lowercase letters to adhere to standard camelCase naming.
+- [ ] Remove unused duplicate method `canDeleteCustomer` from `ProposalService`.
+- [ ] Rename or invert the logic of `hasActiveProposals` in `CustomerService` to match its actual behavior.
+
+---
+
+# Overall Assessment
+
+### Scores (Out of 10)
+* **Architecture:** 8 / 10 (Solid layered structure; decoupled references)
+* **Code Quality:** 6 / 10 (Inconsistent counter scopes, reversed naming, manual instantiation, and naming violations)
+* **Java:** 7 / 10 (Good concurrent collections, but references mutated without defensive copying)
+* **Spring Boot:** 6 / 10 (Bypassed DI context; invalid build configuration)
+* **Testing:** 5 / 10 (Fails to build out-of-the-box due to compile and runtime test failures)
+* **Readability:** 8 / 10 (Indentation, imports, and variables are generally clean, except for reversed naming semantics)
+* **Maintainability:** 7 / 10 (Well-organized package layout; modular validation rules)
+* **Assignment Completeness:** 8 / 10 (Implements CRUD, soft-deletes, and audits, but PAN compliance checks are broken)
+
+---
+
+### Interview Guidance
+
+#### 1. Would you pass this assignment?
+As it currently stands, **NO**. A broken test suite and failing Gradle build will result in an immediate rejection in any automated or manual grading pipeline. However, once the two broken tests and the PAN validation logic bug are resolved, this would receive a **High Pass** with top marks for its layered separation, custom validation structure, and DTO implementation.
+
+#### 2. What would impress the interviewer?
+* The clean decoupling of domain models: using customer ID foreign-keys in the `Proposal` class rather than direct entity object mappings, which prevents circular reference mapping crashes in REST serialization.
+* Thread-safe memory design using `ConcurrentHashMap` and `AtomicInteger` to represent data in a realistic concurrent web container environment.
+* High readability of tests using grouped assertions (`assertAll`).
+* Clear architectural design documentation inside `DESIGN_DECISIONS.md`.
+
+#### 3. What questions might the interviewer ask?
+* *"Why did you manually instantiate `MaskPii` using the `new` keyword if it's annotated as a Spring `@Component` bean?"*
+* *"In your `CustomerService.updateCustomer` method, what would happen if two separate HTTP requests updated the same customer concurrently? Is your thread-safe collection enough to prevent inconsistent state?"*
+* *"Explain why `CustomerService.hasActiveProposals` returns true when a customer has no proposals. Does the method name match the behavior?"*
+* *"How would you transition this in-memory repository structure to a relational database using Spring Data JPA and Hibernate?"*
+
+#### 4. What parts of the code should the student be able to explain?
+* **Concurrency Mechanics:** The difference between `HashMap` and `ConcurrentHashMap`, and how `AtomicInteger.incrementAndGet()` guarantees thread-safe ID increments.
+* **Global Exception Handling:** How `@RestControllerAdvice` intercepts service exceptions and serializes them into custom `ErrorResponse` payloads.
+* **DTO Pattern:** Why separating models and DTOs is necessary for api contract versioning and information security (e.g. hiding audit metadata fields).
+* **Validation lifecycle:** The differences between JSR-380 controller-level validation and service-layer programmatic validation.

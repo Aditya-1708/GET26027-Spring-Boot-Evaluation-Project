@@ -5,7 +5,9 @@ import com.policy.api.dto.response.CustomerResponse;
 import com.policy.api.exception.CustomerNotFoundException;
 import com.policy.api.exception.InvalidCustomerException;
 import com.policy.api.model.Customer;
+import com.policy.api.model.Proposal;
 import com.policy.api.repository.CustomerRepository;
+import com.policy.api.repository.ProposalRepository;
 import com.policy.api.util.IdGenerator;
 import com.policy.api.util.MaskPii;
 import com.policy.api.validation.Validation;
@@ -18,8 +20,10 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
@@ -33,6 +37,12 @@ class CustomerServiceTest {
 
     @Mock
     private Validation validation;
+
+    @Mock
+    private ProposalRepository proposalRepository;
+
+    @Spy
+    private MaskPii maskPii = new MaskPii();
 
     @InjectMocks
     private CustomerService service;
@@ -141,6 +151,7 @@ class CustomerServiceTest {
         when(repository.get("CUST001")).thenReturn(existingCustomer);
 
         when(validation.validateCustomer(request)).thenReturn("true");
+        when(repository.save(any(Customer.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         CustomerResponse response = service.updateCustomer("CUST001", request);
 
@@ -165,12 +176,29 @@ class CustomerServiceTest {
         Customer customer = new Customer("CUST001", "Aditya", "Umesh", 22, "Male", "9876543210", "aditya@gmail.com", "Bangalore", false, null);
 
         when(repository.get("CUST001")).thenReturn(customer);
+        when(proposalRepository.getByCustomerId("CUST001")).thenReturn(List.of());
+        
+        ArgumentCaptor<Customer> customerCaptor = ArgumentCaptor.forClass(Customer.class);
+        when(repository.save(customerCaptor.capture())).thenAnswer(invocation -> invocation.getArgument(0));
 
         CustomerResponse response = service.deleteCustomer("CUST001");
 
         assertNotNull(response);
-        assertTrue(customer.isDeleted());
-        assertNotNull(customer.getDeletedAt());
+        Customer deletedCustomer = customerCaptor.getValue();
+        assertTrue(deletedCustomer.isDeleted());
+        assertNotNull(deletedCustomer.getDeletedAt());
+    }
+
+    @Test
+    void shouldThrowInvalidCustomerExceptionWhenDeletingCustomerWithActiveProposals() {
+
+        Customer customer = new Customer("CUST001", "Aditya", "Umesh", 22, "Male", "9876543210", "aditya@gmail.com", "Bangalore", false, null);
+        Proposal activeProposal = new Proposal("PROP001", "CUST001", null, 0, null, null, null, 0, null, false, null);
+
+        when(repository.get("CUST001")).thenReturn(customer);
+        when(proposalRepository.getByCustomerId("CUST001")).thenReturn(List.of(activeProposal));
+
+        assertThrows(InvalidCustomerException.class, () -> service.deleteCustomer("CUST001"));
     }
 
     @Test

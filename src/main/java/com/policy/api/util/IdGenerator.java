@@ -10,7 +10,7 @@ public class IdGenerator {
     private final AtomicInteger customerCount = new AtomicInteger(0);
     private final AtomicInteger proposalCount = new AtomicInteger(0);
     private final AtomicInteger auditCount  = new AtomicInteger(0);
-    private static final AtomicInteger counter = new AtomicInteger(100000);
+    private final AtomicInteger counter = new AtomicInteger(100000);
 
     public String generateCustomerId() {
         int count = customerCount.incrementAndGet();

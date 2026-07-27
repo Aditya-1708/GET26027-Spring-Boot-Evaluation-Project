@@ -5,7 +5,9 @@ import com.policy.api.dto.response.CustomerResponse;
 import com.policy.api.exception.CustomerNotFoundException;
 import com.policy.api.exception.InvalidCustomerException;
 import com.policy.api.model.Customer;
+import com.policy.api.model.Proposal;
 import com.policy.api.repository.CustomerRepository;
+import com.policy.api.repository.ProposalRepository;
 import com.policy.api.util.IdGenerator;
 import com.policy.api.util.MaskPii;
 import com.policy.api.validation.Validation;
@@ -21,20 +23,26 @@ public class CustomerService {
 
     private final CustomerRepository repository;
 
+    private final ProposalRepository proposalRepository;
+
     private final IdGenerator generator;
 
     private final Validation validation;
 
-    private final MaskPii maskPii = new MaskPii();
+    private final MaskPii maskPii;
 
     public CustomerService(
             CustomerRepository repository,
             IdGenerator generator,
-            Validation validation) {
+            Validation validation,
+            ProposalRepository proposalRepository,
+            MaskPii maskPii) {
 
         this.repository = repository;
         this.generator = generator;
         this.validation = validation;
+        this.proposalRepository = proposalRepository;
+        this.maskPii = maskPii;
     }
 
 
@@ -67,6 +75,17 @@ public class CustomerService {
         );
     }
 
+    public boolean hasActiveProposals(String customerId) {
+
+        List<Proposal> fetchedProposals = proposalRepository.getByCustomerId(customerId);
+
+        if (fetchedProposals.isEmpty()) {
+            return false;
+        }
+
+        return !fetchedProposals.stream()
+                .allMatch(Proposal::isDeleted);
+    }
 
     public CustomerResponse createCustomer(CustomerRequest customer) {
         String isValid = validation.validateCustomer(customer);
@@ -114,27 +133,47 @@ public class CustomerService {
             throw new InvalidCustomerException(isValid);
         }
 
-        existingCustomer.setFirstName(customerRequest.getFirstName());
-        existingCustomer.setLastName(customerRequest.getLastName());
-        existingCustomer.setAge(customerRequest.getAge());
-        existingCustomer.setGender(customerRequest.getGender());
-        existingCustomer.setMobileNumber(customerRequest.getMobileNumber());
-        existingCustomer.setEmail(customerRequest.getEmail());
-        existingCustomer.setAddress(customerRequest.getAddress());
+        Customer updatedCustomer = new Customer(
+                existingCustomer.getCustomerId(),
+                customerRequest.getFirstName(),
+                customerRequest.getLastName(),
+                customerRequest.getAge(),
+                customerRequest.getGender(),
+                customerRequest.getMobileNumber(),
+                customerRequest.getEmail(),
+                customerRequest.getAddress(),
+                existingCustomer.isDeleted(),
+                existingCustomer.getDeletedAt()
+        );
 
+        Customer savedCustomer = repository.save(updatedCustomer);
 
-        return mapToResponse(existingCustomer);
+        return mapToResponse(savedCustomer);
     }
 
 
     public CustomerResponse deleteCustomer(String customerId) {
         Customer existingCustomer = getActiveCustomer(customerId);
 
+        if (hasActiveProposals(customerId)) {
+            throw new InvalidCustomerException("Customer has active proposals and cannot be deleted.");
+        }
 
+        Customer deletedCustomer = new Customer(
+                existingCustomer.getCustomerId(),
+                existingCustomer.getFirstName(),
+                existingCustomer.getLastName(),
+                existingCustomer.getAge(),
+                existingCustomer.getGender(),
+                existingCustomer.getMobileNumber(),
+                existingCustomer.getEmail(),
+                existingCustomer.getAddress(),
+                true,
+                LocalDateTime.now()
+        );
 
-        existingCustomer.setDeleted(true);
-        existingCustomer.setDeletedAt(LocalDateTime.now());
+        Customer savedCustomer = repository.save(deletedCustomer);
 
-        return mapToResponse(existingCustomer);
+        return mapToResponse(savedCustomer);
     }
 }

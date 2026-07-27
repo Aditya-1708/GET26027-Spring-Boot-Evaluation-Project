@@ -18,10 +18,10 @@ public class Proposal {
     private String customerId;
     private PolicyTerm policyTerm;
     private int sumAssured;
-    private String PAN;
-    private String Nominee;
+    private String pan;
+    private String nominee;
     private PaymentFrequency paymentFrequency;
-    private int PolicyUid;
+    private int policyUid;
     private PolicyStatus policyStatus;
     private boolean deleted;
     private LocalDateTime deletedAt;

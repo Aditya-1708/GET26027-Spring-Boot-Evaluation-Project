@@ -46,6 +46,9 @@ class AuditServiceTest {
                 LocalDateTime.now()
         );
 
+        when(generator.generateAuditId())
+                .thenReturn("AUD001");
+
         when(repository.save(any(Audit.class)))
                 .thenReturn(audit);
 
